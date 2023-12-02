@@ -1,3 +1,4 @@
+use std::cmp;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -45,14 +46,35 @@ fn main() {
         };
         games.push(game);
     }
-    let part_1_matching_games = games.iter().filter(|game| {
-        !game
-            .rounds
-            .iter()
-            .any(|round| round.num_green > 13 || round.num_blue > 14 || round.num_red > 12)
-    });
-    let part_1_solution = part_1_matching_games.map(|game| game.id).sum::<u32>();
-    println!("Part 1 solution: {}", part_1_solution);
+    // let part_1_matching_games = games.iter().filter(|game| {
+    //     !game
+    //         .rounds
+    //         .iter()
+    //         .any(|round| round.num_green > 13 || round.num_blue > 14 || round.num_red > 12)
+    // });
+    // let part_1_solution = part_1_matching_games.map(|game| game.id).sum::<u32>();
+    // println!("Part 1 solution: {}", part_1_solution);
+    let mut max_round_values: Vec<GameRound> = Vec::new();
+    for game in games {
+        let mut max_green = 0;
+        let mut max_blue = 0;
+        let mut max_red = 0;
+        for round in game.rounds {
+            max_green = cmp::max(max_green, round.num_green);
+            max_red = cmp::max(max_red, round.num_red);
+            max_blue = cmp::max(max_blue, round.num_blue);
+        }
+        max_round_values.push(GameRound {
+            num_red: max_red,
+            num_blue: max_blue,
+            num_green: max_green,
+        });
+    }
+    let part_2_solution = max_round_values
+        .iter()
+        .map(|round| round.num_green * round.num_blue * round.num_red)
+        .sum::<u32>();
+    println!("Part 2 solution: {}", part_2_solution);
 }
 
 #[derive(Debug)]
