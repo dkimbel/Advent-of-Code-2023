@@ -1,10 +1,15 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Coords {
     x: usize,
     y: usize,
+}
+
+struct PartNumber {
+    value: u32,
+    surrounding_coords_incl_diagonal: Vec<Coords>,
 }
 
 fn main() {
@@ -17,7 +22,8 @@ fn main() {
         grid.push(line_content.chars().collect::<Vec<_>>());
     }
 
-    let mut part_numbers: Vec<u32> = Vec::new();
+    let mut part_numbers: Vec<PartNumber> = Vec::new();
+    let mut gear_coords: Vec<Coords> = Vec::new();
     let mut curr_num_chars: Vec<char> = Vec::new();
     let mut indices_to_check: Vec<Coords> = Vec::new();
     // we assume that every row has the same length
@@ -29,6 +35,11 @@ fn main() {
             let curr_char_is_digit = char.is_digit(radix);
             if curr_char_is_digit {
                 curr_num_chars.push(*char);
+            } else if *char == '*' {
+                gear_coords.push(Coords {
+                    x: col_index,
+                    y: row_index,
+                });
             }
 
             // if we've just reached the end of a row or we've just reached the end of a
@@ -36,7 +47,7 @@ fn main() {
             let num_len = curr_num_chars.len();
             let line_end = col_index + 1 == num_cols;
             if (line_end || !char.is_digit(radix)) && num_len > 0 {
-                // TODO: check surroundings and add part number if appropriate
+                // check surroundings and add part number if appropriate
                 let curr_num = curr_num_chars
                     .iter()
                     .collect::<String>()
@@ -115,7 +126,10 @@ fn main() {
                 for coords in indices_to_check.iter() {
                     let grid_item = grid[coords.y][coords.x];
                     if !grid_item.is_digit(radix) && grid_item != '.' {
-                        part_numbers.push(curr_num);
+                        part_numbers.push(PartNumber {
+                            value: curr_num,
+                            surrounding_coords_incl_diagonal: indices_to_check.clone(),
+                        });
                         break;
                     }
                 }
@@ -125,6 +139,29 @@ fn main() {
             }
         }
     }
-    let part_1_solution = part_numbers.iter().sum::<u32>();
-    println!("Part 1 solution: {part_1_solution}");
+    // let part_1_solution = part_numbers
+    //     .iter()
+    //     .map(|part_num| part_num.value)
+    //     .sum::<u32>();
+    // println!("Part 1 solution: {part_1_solution}");
+
+    let mut gear_ratios: Vec<u32> = Vec::new();
+    let mut part_numbers_adjacent_to_current_gear: Vec<u32> = Vec::new();
+    // TODO: find gears that have exactly two adjacent nums
+    // TODO: calculate and sum gear scores
+    for gear in gear_coords {
+        for part_number in part_numbers.iter() {
+            if part_number.surrounding_coords_incl_diagonal.contains(&gear) {
+                part_numbers_adjacent_to_current_gear.push(part_number.value);
+            }
+        }
+        if part_numbers_adjacent_to_current_gear.len() == 2 {
+            let gear_ratio =
+                part_numbers_adjacent_to_current_gear[0] * part_numbers_adjacent_to_current_gear[1];
+            gear_ratios.push(gear_ratio);
+        }
+        part_numbers_adjacent_to_current_gear.clear();
+    }
+    let part_2_solution = gear_ratios.into_iter().sum::<u32>();
+    println!("Part 2 solution: {part_2_solution}");
 }
