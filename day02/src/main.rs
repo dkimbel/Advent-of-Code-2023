@@ -4,7 +4,8 @@ use std::io::{BufRead, BufReader};
 
 fn main() {
     let games = parse_games("resources/input_1");
-    solve_part_2(games);
+    let solution = solve_part_2(games);
+    println!("{solution}")
 }
 
 #[derive(Debug)]
@@ -72,18 +73,17 @@ fn parse_games(file_path: &str) -> Vec<Game> {
     games
 }
 
-fn solve_part_1(games: Vec<Game>) {
+fn solve_part_1(games: Vec<Game>) -> u32 {
     let part_1_matching_games = games.iter().filter(|game| {
         !game
             .rounds
             .iter()
             .any(|round| round.num_green > 13 || round.num_blue > 14 || round.num_red > 12)
     });
-    let part_1_solution = part_1_matching_games.map(|game| game.id).sum::<u32>();
-    println!("{}", part_1_solution);
+    part_1_matching_games.map(|game| game.id).sum::<u32>()
 }
 
-fn solve_part_2(games: Vec<Game>) {
+fn solve_part_2(games: Vec<Game>) -> u32 {
     let mut max_round_values: Vec<GameRound> = Vec::new();
     for game in games {
         let mut max_green = 0;
@@ -100,9 +100,27 @@ fn solve_part_2(games: Vec<Game>) {
             num_green: max_green,
         });
     }
-    let part_2_solution = max_round_values
+    max_round_values
         .iter()
         .map(|round| round.num_green * round.num_blue * round.num_red)
-        .sum::<u32>();
-    println!("{}", part_2_solution);
+        .sum::<u32>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_part_one() {
+        let games = parse_games("resources/input_1");
+        let solution = solve_part_1(games);
+        assert_eq!(solution, 2101);
+    }
+
+    #[test]
+    fn test_part_two() {
+        let games = parse_games("resources/input_1");
+        let solution = solve_part_2(games);
+        assert_eq!(solution, 58269);
+    }
 }
