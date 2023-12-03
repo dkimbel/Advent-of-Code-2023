@@ -3,14 +3,26 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 fn main() {
-    // let file = File::open("resources/sample_1").unwrap();
-    let file = File::open("resources/input_1").unwrap();
-    let reader = BufReader::new(file);
+    let games = parse_games("resources/input_1");
+    solve_part_2(games);
+}
 
-    let mut games: Vec<Game> = Vec::new();
-    for line in reader.lines() {
-        let line_content = &line.unwrap();
-        let line_halves = line_content.split(": ").collect::<Vec<_>>();
+#[derive(Debug)]
+struct GameRound {
+    num_green: u32,
+    num_red: u32,
+    num_blue: u32,
+}
+
+#[derive(Debug)]
+struct Game {
+    id: u32,
+    rounds: Vec<GameRound>,
+}
+
+impl Game {
+    fn new(input_line: &str) -> Self {
+        let line_halves = input_line.split(": ").collect::<Vec<_>>();
         let game_id = line_halves[0].split(" ").collect::<Vec<_>>()[1]
             .parse::<u32>()
             .unwrap();
@@ -40,20 +52,38 @@ fn main() {
             };
             rounds.push(round);
         }
-        let game = Game {
+        Game {
             id: game_id,
             rounds,
-        };
+        }
+    }
+}
+
+fn parse_games(file_path: &str) -> Vec<Game> {
+    let file = File::open(file_path).unwrap();
+    let reader = BufReader::new(file);
+
+    let mut games: Vec<Game> = Vec::new();
+    for line in reader.lines() {
+        let line_content = &line.unwrap();
+        let game = Game::new(line_content);
         games.push(game);
     }
-    // let part_1_matching_games = games.iter().filter(|game| {
-    //     !game
-    //         .rounds
-    //         .iter()
-    //         .any(|round| round.num_green > 13 || round.num_blue > 14 || round.num_red > 12)
-    // });
-    // let part_1_solution = part_1_matching_games.map(|game| game.id).sum::<u32>();
-    // println!("Part 1 solution: {}", part_1_solution);
+    games
+}
+
+fn solve_part_1(games: Vec<Game>) {
+    let part_1_matching_games = games.iter().filter(|game| {
+        !game
+            .rounds
+            .iter()
+            .any(|round| round.num_green > 13 || round.num_blue > 14 || round.num_red > 12)
+    });
+    let part_1_solution = part_1_matching_games.map(|game| game.id).sum::<u32>();
+    println!("{}", part_1_solution);
+}
+
+fn solve_part_2(games: Vec<Game>) {
     let mut max_round_values: Vec<GameRound> = Vec::new();
     for game in games {
         let mut max_green = 0;
@@ -74,18 +104,5 @@ fn main() {
         .iter()
         .map(|round| round.num_green * round.num_blue * round.num_red)
         .sum::<u32>();
-    println!("Part 2 solution: {}", part_2_solution);
-}
-
-#[derive(Debug)]
-struct GameRound {
-    num_green: u32,
-    num_red: u32,
-    num_blue: u32,
-}
-
-#[derive(Debug)]
-struct Game {
-    id: u32,
-    rounds: Vec<GameRound>,
+    println!("{}", part_2_solution);
 }
