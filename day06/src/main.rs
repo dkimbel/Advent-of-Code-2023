@@ -28,8 +28,6 @@ fn solve_part_1(filename: &str) -> usize {
     let distances = split[1]
         .split_whitespace()
         .skip(1)
-        .collect::<Vec<_>>()
-        .iter()
         .map(|s| s.parse::<usize>().unwrap())
         .collect::<Vec<_>>();
 
@@ -59,6 +57,11 @@ fn solve_part_1(filename: &str) -> usize {
     nums_winning_options.iter().product::<usize>()
 }
 
+// Brute force worked just fine. If it hadn't, there would be a lot of options:
+// - Binary search to find first winning option, then depend on symmetry to know
+//   that if time=n was first winning option, time=(race_time-n) was last?
+// - Some kind of clever math function that can solve the problem without any interation
+//   whatsover?
 fn solve_part_2(filename: &str) -> usize {
     let file_content = fs::read_to_string(filename).unwrap();
     let split = file_content.split("\n").collect::<Vec<_>>();
