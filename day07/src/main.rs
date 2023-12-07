@@ -20,10 +20,17 @@ impl HandType {
         for card in cards {
             *counts_by_card.entry(card).or_insert(0) += 1;
         }
+        let joker_count = counts_by_card.get(&Card::Joker).cloned().unwrap_or(0);
+        counts_by_card.remove(&Card::Joker);
         let mut card_counts = counts_by_card.values().collect::<Vec<_>>();
         // sort in descending order
         card_counts.sort_by(|a, b| b.cmp(a));
-        let max_card_count = card_counts[0];
+        // let max_card_count = card_counts[0] + joker_count;
+        let max_card_count = if !card_counts.is_empty() {
+            card_counts[0] + joker_count
+        } else {
+            joker_count
+        };
         use HandType::*;
         match max_card_count {
             5 => FiveOfAKind,
@@ -78,7 +85,8 @@ enum Card {
     Eight,
     Nine,
     Ten,
-    Jack,
+    // Jack,
+    Joker,
     Queen,
     King,
     Ace,
@@ -97,7 +105,8 @@ impl Card {
             '8' => Eight,
             '9' => Nine,
             'T' => Ten,
-            'J' => Jack,
+            // 'J' => Jack,
+            'J' => Joker,
             'Q' => Queen,
             'K' => King,
             'A' => Ace,
@@ -117,7 +126,8 @@ impl Card {
             Eight => 8,
             Nine => 9,
             Ten => 10,
-            Jack => 11,
+            // Jack => 11,
+            Joker => 1,
             Queen => 12,
             King => 13,
             Ace => 14,
