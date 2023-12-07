@@ -25,7 +25,6 @@ impl HandType {
         let mut card_counts = counts_by_card.values().collect::<Vec<_>>();
         // sort in descending order
         card_counts.sort_by(|a, b| b.cmp(a));
-        // let max_card_count = card_counts[0] + joker_count;
         let max_card_count = if !card_counts.is_empty() {
             card_counts[0] + joker_count
         } else {
@@ -76,6 +75,7 @@ impl Ord for HandType {
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd)]
 enum Card {
+    Joker,
     Two,
     Three,
     Four,
@@ -85,15 +85,14 @@ enum Card {
     Eight,
     Nine,
     Ten,
-    // Jack,
-    Joker,
+    Jack,
     Queen,
     King,
     Ace,
 }
 
 impl Card {
-    fn from_char(c: char) -> Card {
+    fn from_char(c: char, jacks_are_jokers: bool) -> Card {
         use Card::*;
         match c {
             '2' => Two,
@@ -105,8 +104,13 @@ impl Card {
             '8' => Eight,
             '9' => Nine,
             'T' => Ten,
-            // 'J' => Jack,
-            'J' => Joker,
+            'J' => {
+                if jacks_are_jokers {
+                    Joker
+                } else {
+                    Jack
+                }
+            }
             'Q' => Queen,
             'K' => King,
             'A' => Ace,
@@ -117,6 +121,7 @@ impl Card {
     fn to_num(self) -> usize {
         use Card::*;
         match self {
+            Joker => 1,
             Two => 2,
             Three => 3,
             Four => 4,
@@ -126,8 +131,7 @@ impl Card {
             Eight => 8,
             Nine => 9,
             Ten => 10,
-            // Jack => 11,
-            Joker => 1,
+            Jack => 11,
             Queen => 12,
             King => 13,
             Ace => 14,
@@ -179,8 +183,8 @@ impl PartialEq for Hand {
 
 impl Eq for Hand {}
 
-fn main() {
-    let file = File::open("resources/input_1").unwrap();
+fn solve(file_path: &str, jacks_are_jokers: bool) -> usize {
+    let file = File::open(file_path).unwrap();
     let reader = BufReader::new(file);
     let mut hands: Vec<Hand> = Vec::new();
     for line in reader.lines() {
@@ -189,7 +193,7 @@ fn main() {
         let bid = split[1].parse::<usize>().unwrap();
         let cards_vec = split[0]
             .chars()
-            .map(|c| Card::from_char(c))
+            .map(|c| Card::from_char(c, jacks_are_jokers))
             .collect::<Vec<_>>();
         let cards = [
             cards_vec[0],
@@ -213,6 +217,15 @@ fn main() {
         let hand_num: usize = i + 1;
         hand_winnings.push(hand_num * hand.bid);
     }
-    let part_1_solution = hand_winnings.iter().sum::<usize>();
+    hand_winnings.iter().sum::<usize>()
+}
+
+fn main() {
+    let file_path = "resources/input_1";
+
+    let part_1_solution = solve(file_path, false);
     println!("Part 1 solution: {part_1_solution}");
+
+    let part_2_solution = solve(file_path, true);
+    println!("Part 2 solution: {part_2_solution}");
 }
