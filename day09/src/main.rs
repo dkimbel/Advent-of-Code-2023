@@ -1,23 +1,27 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+fn generate_diffs(readings: &[i64]) -> Vec<i64> {
+    readings
+        .windows(2)
+        .map(|slice| {
+            if slice.len() == 2 {
+                slice[1] - slice[0]
+            } else if slice.len() == 1 {
+                slice[0]
+            } else {
+                panic!("Ran out of items in slice!");
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
 fn infer_last_reading(readings: &[i64]) -> i64 {
     // base case
     if readings.iter().all(|r| *r == 0) {
         return 0;
     } else {
-        let diffs = readings
-            .windows(2)
-            .map(|slice| {
-                if slice.len() == 2 {
-                    slice[1] - slice[0]
-                } else if slice.len() == 1 {
-                    slice[0]
-                } else {
-                    panic!("Ran out of items in slice!");
-                }
-            })
-            .collect::<Vec<_>>();
+        let diffs = generate_diffs(readings);
         return readings.iter().last().unwrap() + infer_last_reading(&diffs);
     }
 }
@@ -27,18 +31,7 @@ fn infer_first_reading(readings: &[i64]) -> i64 {
     if readings.iter().all(|r| *r == 0) {
         return 0;
     } else {
-        let diffs = readings
-            .windows(2)
-            .map(|slice| {
-                if slice.len() == 2 {
-                    slice[1] - slice[0]
-                } else if slice.len() == 1 {
-                    slice[0]
-                } else {
-                    panic!("Ran out of items in slice!");
-                }
-            })
-            .collect::<Vec<_>>();
+        let diffs = generate_diffs(readings);
         return readings[0] - infer_first_reading(&diffs);
     }
 }
