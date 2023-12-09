@@ -22,6 +22,27 @@ fn infer_last_reading(readings: &[i64]) -> i64 {
     }
 }
 
+fn infer_first_reading(readings: &[i64]) -> i64 {
+    // base case
+    if readings.iter().all(|r| *r == 0) {
+        return 0;
+    } else {
+        let diffs = readings
+            .windows(2)
+            .map(|slice| {
+                if slice.len() == 2 {
+                    slice[1] - slice[0]
+                } else if slice.len() == 1 {
+                    slice[0]
+                } else {
+                    panic!("Ran out of items in slice!");
+                }
+            })
+            .collect::<Vec<_>>();
+        return readings[0] - infer_first_reading(&diffs);
+    }
+}
+
 fn main() {
     let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
@@ -41,4 +62,11 @@ fn main() {
         .collect::<Vec<_>>();
     let part_1_solution = extrapolations.iter().sum::<i64>();
     println!("Part 1 solution: {part_1_solution}");
+
+    let first_reading_extrapolations = histories
+        .iter()
+        .map(|h| infer_first_reading(h))
+        .collect::<Vec<_>>();
+    let part_2_solution = first_reading_extrapolations.iter().sum::<i64>();
+    println!("Part 2 solution: {part_2_solution}");
 }
