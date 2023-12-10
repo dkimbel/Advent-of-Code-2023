@@ -1,181 +1,249 @@
 use std::fs;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum EntryType {
+    Finished, // indicates we're finished searching
+    Seed,
+    Soil,
+    Fertilizer,
+    Water,
+    Light,
+    Temperature,
+    Humidity,
+    Location,
+}
+
 #[derive(Debug, Copy, Clone)]
 struct Range {
     start: i64,
     end: i64,
+    entry_type: EntryType,
 }
 
 #[derive(Debug)]
-struct AlmanacMap {
+struct SearchRange {
+    range: Range,
+    diff_from_originating_location_range: i64,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct RangeMap {
     source_start: i64,
     source_end: i64,
     dest_source_diff: i64,
 }
 
-impl AlmanacMap {
-    fn traverse(&self, source: i64) -> Option<i64> {
-        if source >= self.source_start && source <= self.source_end {
-            Some(source + self.dest_source_diff)
-        } else {
-            None
+impl RangeMap {
+    fn from_line(line: &str) -> RangeMap {
+        let split = line.split_whitespace().collect::<Vec<_>>();
+        let range = split[2].parse::<i64>().unwrap();
+        let source_start = split[0].parse::<i64>().unwrap();
+        let source_end = source_start + range - 1;
+        let dest_start = split[1].parse::<i64>().unwrap();
+        let dest_source_diff = dest_start - source_start;
+        RangeMap {
+            source_start,
+            source_end,
+            dest_source_diff,
         }
-    }
-
-    fn traverse_opposite_direction(&self, dest: i64) -> Option<i64> {
-        let dest_start = self.source_start + self.dest_source_diff;
-        let dest_end = self.source_end + self.dest_source_diff;
-        if dest >= dest_start && dest <= dest_end {
-            Some(dest - self.dest_source_diff)
-        } else {
-            None
-        }
-    }
-
-    fn traverse_list(maps: &[Self], source: i64) -> i64 {
-        for map in maps {
-            match map.traverse(source) {
-                Some(dest) => {
-                    return dest;
-                }
-                None => (),
-            }
-        }
-        // default behavior: source maps directly to dest
-        return source;
-    }
-
-    fn traverse_list_opposite_direction(maps: &[Self], dest: i64) -> i64 {
-        for map in maps {
-            match map.traverse_opposite_direction(dest) {
-                Some(source) => {
-                    return source;
-                }
-                None => (),
-            }
-        }
-        // default behavior: dest maps directly to source
-        return dest;
     }
 }
 
 #[derive(Debug)]
-struct Almanac {
-    seeds: Vec<i64>,
-    seed_ranges: Vec<Range>,
-    seed_to_soil: Vec<AlmanacMap>,
-    soil_to_fertilizer: Vec<AlmanacMap>,
-    fertilizer_to_water: Vec<AlmanacMap>,
-    water_to_light: Vec<AlmanacMap>,
-    light_to_temperature: Vec<AlmanacMap>,
-    temperature_to_humidity: Vec<AlmanacMap>,
-    humidity_to_location: Vec<AlmanacMap>,
+struct ReversedAlmanac {
+    location_to_humidity: Vec<RangeMap>,
+    humidity_to_temperature: Vec<RangeMap>,
+    temperature_to_light: Vec<RangeMap>,
+    light_to_water: Vec<RangeMap>,
+    water_to_fertilizer: Vec<RangeMap>,
+    fertilizer_to_soil: Vec<RangeMap>,
+    soil_to_seed: Vec<RangeMap>,
+    seed_to_finished: Vec<RangeMap>,
 }
 
-impl Almanac {
-    fn seed_location(&self, seed: i64) -> i64 {
-        let soil = AlmanacMap::traverse_list(&self.seed_to_soil, seed);
-        let fertilizer = AlmanacMap::traverse_list(&self.soil_to_fertilizer, soil);
-        let water = AlmanacMap::traverse_list(&self.fertilizer_to_water, fertilizer);
-        let light = AlmanacMap::traverse_list(&self.water_to_light, water);
-        let temperature = AlmanacMap::traverse_list(&self.light_to_temperature, light);
-        let humidity = AlmanacMap::traverse_list(&self.temperature_to_humidity, temperature);
-        AlmanacMap::traverse_list(&self.humidity_to_location, humidity)
+impl ReversedAlmanac {
+    fn depth_first_search_by_range(&self) -> Option<i64> {
+        let mut search_stack = self.location_ranges_search_stack();
+
+        while let Some(search_range) = search_stack.pop() {
+            if search_range.range.entry_type == EntryType::Finished {
+                return Some(
+                    search_range.range.start - search_range.diff_from_originating_location_range,
+                );
+            }
+            search_stack.append(&mut self.destination_ranges_desc_order(search_range));
+        }
+        None
     }
 
-    fn location_seed(&self, location: i64) -> i64 {
-        let humidity =
-            AlmanacMap::traverse_list_opposite_direction(&self.humidity_to_location, location);
-        let temperature =
-            AlmanacMap::traverse_list_opposite_direction(&self.temperature_to_humidity, humidity);
-        let light =
-            AlmanacMap::traverse_list_opposite_direction(&self.light_to_temperature, temperature);
-        let water = AlmanacMap::traverse_list_opposite_direction(&self.water_to_light, light);
-        let fertilizer =
-            AlmanacMap::traverse_list_opposite_direction(&self.fertilizer_to_water, water);
-        let soil =
-            AlmanacMap::traverse_list_opposite_direction(&self.soil_to_fertilizer, fertilizer);
-        AlmanacMap::traverse_list_opposite_direction(&self.seed_to_soil, soil)
+    fn destination_ranges_desc_order(&self, search_range: SearchRange) -> Vec<SearchRange> {
+        use EntryType::*;
+        let (range_maps, destination_type) = match search_range.range.entry_type {
+            Location => (&self.location_to_humidity, Humidity),
+            Humidity => (&self.humidity_to_temperature, Temperature),
+            Temperature => (&self.temperature_to_light, Light),
+            Light => (&self.light_to_water, Water),
+            Water => (&self.water_to_fertilizer, Fertilizer),
+            Fertilizer => (&self.fertilizer_to_soil, Soil),
+            Soil => (&self.soil_to_seed, Seed),
+            Seed => (&self.seed_to_finished, Finished),
+            Finished => panic!("Cannot look up destination ranges for a Finished entry!"),
+        };
+        let mut destination_ranges: Vec<SearchRange> = Vec::new();
+        // Detect any overlap between each range map and our search range. Remember:
+        // range maps are sorted in ascending order.
+        for range_map in range_maps {
+            if range_map.source_end >= search_range.range.start
+                && range_map.source_end <= search_range.range.end
+            {
+                // range map ends within search range (and may or may not start within it too)
+                destination_ranges.push(SearchRange {
+                    range: Range {
+                        start: std::cmp::max(range_map.source_start, search_range.range.start)
+                            + range_map.dest_source_diff,
+                        end: range_map.source_end + range_map.dest_source_diff,
+                        entry_type: destination_type,
+                    },
+                    diff_from_originating_location_range: search_range
+                        .diff_from_originating_location_range
+                        + range_map.dest_source_diff,
+                });
+            } else if range_map.source_start < search_range.range.start
+                && range_map.source_end >= search_range.range.end
+            {
+                // range map completely encapsulates search range
+                destination_ranges.push(SearchRange {
+                    range: Range {
+                        start: search_range.range.start + range_map.dest_source_diff,
+                        end: search_range.range.end + range_map.dest_source_diff,
+                        entry_type: destination_type,
+                    },
+                    diff_from_originating_location_range: search_range
+                        .diff_from_originating_location_range
+                        + range_map.dest_source_diff,
+                });
+            } else if range_map.source_start >= search_range.range.start
+                // range map starts, but does not end, within search range (meaning
+                // it's definitely the last range map we need to deal with)
+                && range_map.source_start <= search_range.range.end
+            {
+                destination_ranges.push(SearchRange {
+                    range: Range {
+                        start: range_map.source_start + range_map.dest_source_diff,
+                        end: search_range.range.end + range_map.dest_source_diff,
+                        entry_type: destination_type,
+                    },
+                    diff_from_originating_location_range: search_range
+                        .diff_from_originating_location_range
+                        + range_map.dest_source_diff,
+                });
+                break;
+            }
+        }
+        // We found these destinations left to right, starting from the lowest (best) originating
+        // location. Since we're ultimately searching using a vec as a stack, reverse the dest
+        // ranges so they'll fit properly in our system.
+        destination_ranges.reverse();
+        destination_ranges
     }
 
-    fn seed_locations(&self) -> Vec<i64> {
-        self.seeds
+    fn location_ranges_search_stack(&self) -> Vec<SearchRange> {
+        // We're using a Vec as our stack to power depth-first search, but we want to start
+        // searching from the lowest-numbered location and our original vec was sorted in
+        // ascending order. Reverse to switch it to descending so we can start by popping off
+        // the lowest possible value.
+        let mut search_ranges = self
+            .location_to_humidity
             .iter()
-            .map(|seed| self.seed_location(*seed))
-            .collect::<Vec<_>>()
-    }
-
-    fn contains_seed(&self, seed: i64) -> bool {
-        self.seed_ranges
-            .iter()
-            .any(|seed_range| seed >= seed_range.start && seed <= seed_range.end)
-    }
-
-    fn work_backwards_lowest_location_to_seed(&self) -> i64 {
-        let location_ranges = self
-            .humidity_to_location
-            .iter()
-            .map(|map| {
-                let location_start = map.source_start + map.dest_source_diff;
-                let location_end = map.source_end + map.dest_source_diff;
-                Range {
-                    start: location_start,
-                    end: location_end,
-                }
+            .map(|loc_to_hum| SearchRange {
+                range: Range {
+                    start: loc_to_hum.source_start,
+                    end: loc_to_hum.source_end,
+                    entry_type: EntryType::Location,
+                },
+                diff_from_originating_location_range: 0,
             })
             .collect::<Vec<_>>();
-
-        // TODO: merge overlapping/adjacent ranges if necessary
-        let mut lowest_starting_range = location_ranges[0];
-        for location_range in location_ranges[1..].iter() {
-            if location_range.start < lowest_starting_range.start {
-                lowest_starting_range = *location_range;
-            }
-        }
-
-        let mut curr_location = lowest_starting_range.start;
-        while curr_location <= lowest_starting_range.end {
-            let seed = self.location_seed(curr_location);
-            if self.contains_seed(seed) {
-                return curr_location;
-            }
-            curr_location += 1;
-        }
-        panic!("Could not find a seed within the lowest-starting location range");
+        search_ranges.reverse();
+        search_ranges
     }
-
-    // fn lowest_location_using_seed_range(&self) -> i64 {
-    //     let mut lowest_location = i64::MAX;
-
-    //     for seed_range in self.seed_ranges.iter() {
-    //         let mut curr_seed = seed_range.start;
-    //         while curr_seed <= seed_range.end {
-    //             let location = self.seed_location(curr_seed);
-    //             lowest_location = std::cmp::min(lowest_location, location);
-    //             curr_seed += 1;
-    //         }
-    //     }
-
-    //     lowest_location
-    // }
 }
 
-fn lines_to_map(lines: &[&str]) -> Vec<AlmanacMap> {
-    let mut maps = Vec::new();
-    for line in lines.iter() {
-        let split = line.split_whitespace().collect::<Vec<_>>();
-        let range = split[2].parse::<i64>().unwrap();
-        let source_start = split[1].parse::<i64>().unwrap();
-        let source_end = source_start + range - 1;
-        let dest_start = split[0].parse::<i64>().unwrap();
-        let dest_source_diff = dest_start - source_start;
-        maps.push(AlmanacMap {
-            source_start,
-            source_end,
-            dest_source_diff,
-        })
+fn lines_to_reversed_map(lines: &[&str], fill_gaps: bool) -> Vec<RangeMap> {
+    // 'filled' as in 'any zero-diff ranges have been added to fill gaps';
+    // those gaps could appear between ranges, or between 0 an the first range,
+    // or between the last range and the max possible int
+    let mut range_maps = lines
+        .iter()
+        .cloned()
+        .map(RangeMap::from_line)
+        .collect::<Vec<_>>();
+    // sort range maps by starting point ascending
+    range_maps.sort_by(|a, b| a.source_start.cmp(&b.source_start));
+    // fill in any gaps between ranges with a 'zero-diff' range, that just maps any input
+    // number directly to the same number as output
+    let mut range_maps_with_intermediate_ranges: Vec<RangeMap> = Vec::new();
+    for (i, pair) in range_maps.windows(2).enumerate() {
+        let first = pair[0];
+        let second = pair[1];
+        if fill_gaps && (i == 0 && first.source_start > 0) {
+            range_maps_with_intermediate_ranges.push(RangeMap {
+                source_start: 0,
+                source_end: first.source_start - 1,
+                dest_source_diff: 0,
+            });
+        }
+        range_maps_with_intermediate_ranges.push(first);
+        let first_end = first.source_end;
+        let second_start = second.source_start;
+        // the ranges are inclusive on both start and end
+        if fill_gaps && (second_start - first_end > 1) {
+            range_maps_with_intermediate_ranges.push(RangeMap {
+                source_start: first_end + 1,
+                source_end: second_start - 1,
+                dest_source_diff: 0,
+            });
+        }
+        if i + 2 >= range_maps.len() {
+            // we've reached the last pair of values -- we're checking i+2 instead
+            // of i+1 because windows() stops at the last full window
+            range_maps_with_intermediate_ranges.push(second);
+            if fill_gaps && (second.source_end < i64::MAX) {
+                range_maps_with_intermediate_ranges.push(RangeMap {
+                    source_start: second.source_end + 1,
+                    source_end: i64::MAX,
+                    dest_source_diff: 0,
+                });
+            }
+        }
     }
-    maps
+    range_maps_with_intermediate_ranges
+}
+
+fn part_2_seed_to_finished(seeds: &[i64]) -> Vec<RangeMap> {
+    seeds
+        .chunks(2)
+        .map(|seed_pair| {
+            let start = seed_pair[0];
+            let range = seed_pair[1];
+            RangeMap {
+                source_start: start,
+                source_end: start + range - 1,
+                dest_source_diff: 0,
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn part_1_seed_to_finished(seeds: &[i64]) -> Vec<RangeMap> {
+    seeds
+        .iter()
+        .map(|&seed| RangeMap {
+            source_start: seed,
+            source_end: seed,
+            dest_source_diff: 0,
+        })
+        .collect::<Vec<_>>()
 }
 
 fn main() {
@@ -189,45 +257,38 @@ fn main() {
         .map(|s| s.parse::<i64>().unwrap())
         .collect::<Vec<_>>();
 
-    let mut seed_ranges = Vec::new();
-    for seed_pair in seeds.chunks(2) {
-        let start = seed_pair[0];
-        let range = seed_pair[1];
-        seed_ranges.push(Range {
-            start,
-            end: start + range - 1,
-        })
-    }
-
-    let seed_to_soil = lines_to_map(&split[1].split("\n").collect::<Vec<_>>()[1..]);
-    let soil_to_fertilizer = lines_to_map(&split[2].split("\n").collect::<Vec<_>>()[1..]);
-    let fertilizer_to_water = lines_to_map(&split[3].split("\n").collect::<Vec<_>>()[1..]);
-    let water_to_light = lines_to_map(&split[4].split("\n").collect::<Vec<_>>()[1..]);
-    let light_to_temperature = lines_to_map(&split[5].split("\n").collect::<Vec<_>>()[1..]);
-    let temperature_to_humidity = lines_to_map(&split[6].split("\n").collect::<Vec<_>>()[1..]);
-    let humidity_to_location = lines_to_map(
+    let soil_to_seed = lines_to_reversed_map(&split[1].split("\n").collect::<Vec<_>>()[1..], true);
+    let fertilizer_to_soil =
+        lines_to_reversed_map(&split[2].split("\n").collect::<Vec<_>>()[1..], true);
+    let water_to_fertilizer =
+        lines_to_reversed_map(&split[3].split("\n").collect::<Vec<_>>()[1..], true);
+    let light_to_water =
+        lines_to_reversed_map(&split[4].split("\n").collect::<Vec<_>>()[1..], true);
+    let temperature_to_light =
+        lines_to_reversed_map(&split[5].split("\n").collect::<Vec<_>>()[1..], true);
+    let humidity_to_temperature =
+        lines_to_reversed_map(&split[6].split("\n").collect::<Vec<_>>()[1..], true);
+    let location_to_humidity = lines_to_reversed_map(
         &split[7]
             .split("\n")
             .filter(|s| s != &"")
             .collect::<Vec<_>>()[1..],
+        true,
     );
 
-    let almanac = Almanac {
-        seeds,
-        seed_ranges,
-        seed_to_soil,
-        soil_to_fertilizer,
-        fertilizer_to_water,
-        water_to_light,
-        light_to_temperature,
-        temperature_to_humidity,
-        humidity_to_location,
+    let seed_to_finished = part_2_seed_to_finished(&seeds);
+
+    let reversed_almanac: ReversedAlmanac = ReversedAlmanac {
+        location_to_humidity,
+        humidity_to_temperature,
+        temperature_to_light,
+        light_to_water,
+        water_to_fertilizer,
+        fertilizer_to_soil,
+        soil_to_seed,
+        seed_to_finished,
     };
 
-    // let locations = almanac.seed_locations();
-    // let part_1_solution = locations.iter().min().unwrap();
-    // println!("Part 1 solution: {part_1_solution}");
-
-    let part_2_solution = almanac.work_backwards_lowest_location_to_seed();
-    println!("Part 2 solution: {part_2_solution}");
+    let solution = reversed_almanac.depth_first_search_by_range().unwrap();
+    println!("Solution: {solution}");
 }
