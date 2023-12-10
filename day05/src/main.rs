@@ -276,9 +276,20 @@ fn main() {
         true,
     );
 
-    let seed_to_finished = part_2_seed_to_finished(&seeds);
+    let part_1_seed_to_finished = part_1_seed_to_finished(&seeds);
+    let part_2_seed_to_finished = part_2_seed_to_finished(&seeds);
 
-    let reversed_almanac: ReversedAlmanac = ReversedAlmanac {
+    let part_1_reversed_almanac: ReversedAlmanac = ReversedAlmanac {
+        location_to_humidity: location_to_humidity.clone(),
+        humidity_to_temperature: humidity_to_temperature.clone(),
+        temperature_to_light: temperature_to_light.clone(),
+        light_to_water: light_to_water.clone(),
+        water_to_fertilizer: water_to_fertilizer.clone(),
+        fertilizer_to_soil: fertilizer_to_soil.clone(),
+        soil_to_seed: soil_to_seed.clone(),
+        seed_to_finished: part_1_seed_to_finished,
+    };
+    let part_2_reversed_almanac: ReversedAlmanac = ReversedAlmanac {
         location_to_humidity,
         humidity_to_temperature,
         temperature_to_light,
@@ -286,9 +297,16 @@ fn main() {
         water_to_fertilizer,
         fertilizer_to_soil,
         soil_to_seed,
-        seed_to_finished,
+        seed_to_finished: part_2_seed_to_finished,
     };
 
-    let solution = reversed_almanac.depth_first_search_by_range().unwrap();
-    println!("Solution: {solution}");
+    let part_1_solution = part_1_reversed_almanac
+        .depth_first_search_by_range()
+        .unwrap();
+    println!("Part 1 solution: {part_1_solution}");
+
+    let part_2_solution = part_2_reversed_almanac
+        .depth_first_search_by_range()
+        .unwrap();
+    println!("Part 2 solution: {part_2_solution}");
 }
