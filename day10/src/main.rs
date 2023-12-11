@@ -191,34 +191,6 @@ fn direction_of_second_from_first(first: Coords, second: Coords) -> Direction {
     panic!("Cannot get relative direction of non-adjacent coords");
 }
 
-fn pipe_pairs_align_vertically(
-    first_pair: (Coords, Coords),
-    second_pair: (Coords, Coords),
-) -> bool {
-    let same_x_values = (first_pair.0.x == second_pair.0.x && first_pair.1.x == second_pair.1.x)
-        || (first_pair.0.x == second_pair.1.x && first_pair.1.x == second_pair.0.x);
-    let internally_consistent_y_values =
-        first_pair.0.y == first_pair.1.y && second_pair.0.y == second_pair.1.y;
-    let higher_y = std::cmp::max(first_pair.0.y, second_pair.0.y);
-    let lesser_y = std::cmp::min(first_pair.0.y, second_pair.0.y);
-    let y_values_within_one = higher_y - lesser_y == 1;
-    same_x_values && internally_consistent_y_values && y_values_within_one
-}
-
-fn pipe_pairs_align_horizontally(
-    first_pair: (Coords, Coords),
-    second_pair: (Coords, Coords),
-) -> bool {
-    let same_y_values = (first_pair.0.y == second_pair.0.y && first_pair.1.y == second_pair.1.y)
-        || (first_pair.0.y == second_pair.1.y && first_pair.1.y == second_pair.0.y);
-    let internally_consistent_x_values =
-        first_pair.0.x == first_pair.1.x && second_pair.0.x == second_pair.1.x;
-    let higher_x = std::cmp::max(first_pair.0.x, second_pair.0.x);
-    let lesser_x = std::cmp::min(first_pair.0.x, second_pair.0.x);
-    let x_values_within_one = higher_x - lesser_x == 1;
-    same_y_values && internally_consistent_x_values && x_values_within_one
-}
-
 fn pipe_pair_allows_passage_north_or_south(
     first_tuple: (Coords, Tile),
     second_tuple: (Coords, Tile),
@@ -445,7 +417,6 @@ fn main() {
             if accessibilities[y][x].is_none() {
                 if grid[y][x] == Tile::Ground {
                     // determine whether this and adjacent ground tiles are enclosed
-                    let mut current_search_was_impeded_by_main_loop = false;
                     let mut current_search_connects_to_outside = false;
                     let mut current_searched_ground_coords: HashSet<Coords> = HashSet::new();
                     let mut current_searched_pipe_coords: HashSet<(Coords, Coords)> =
