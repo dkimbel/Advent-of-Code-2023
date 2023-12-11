@@ -6,13 +6,20 @@ use std::io::{BufRead, BufReader};
 enum TileAccessibility {
     UnenclosedGround,
     MainLoopEnclosedGround,
-    OtherEnclosedGround,
-    Pipe,
+    MainLoopPipe,
 }
 
 #[derive(Debug)]
 struct SearchParams {
     route: Vec<Coords>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Direction {
+    North,
+    South,
+    East,
+    West,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -129,11 +136,9 @@ fn display_grid_with_known_accessibilities(
                 if *tile == Tile::Ground {
                     let maybe_accessibility = accessibilities[y][x];
                     match maybe_accessibility {
-                        None => tile.to_char(),
                         Some(TileAccessibility::UnenclosedGround) => 'O',
                         Some(TileAccessibility::MainLoopEnclosedGround) => 'I',
-                        Some(TileAccessibility::OtherEnclosedGround) => 'Z',
-                        _ => panic!("Could not print grid"),
+                        _ => tile.to_char(),
                     }
                 } else {
                     tile.to_char()
@@ -143,6 +148,47 @@ fn display_grid_with_known_accessibilities(
         printable = format!("{}{}\n", printable, row_str);
     }
     format!("{}\n", printable)
+}
+
+fn allows_passage_between(
+    maybe_first: Option<(Coords, Tile)>,
+    maybe_second: Option<(Coords, Tile)>,
+) -> bool {
+    if maybe_first.is_none() || maybe_second.is_none() {
+        return false;
+    }
+    let first = maybe_first.unwrap();
+    let second = maybe_second.unwrap();
+    pipe_pair_allows_passage_north_or_south(first, second)
+        || pipe_pair_allows_passage_east_or_west(first, second)
+}
+
+fn direction_of_second_from_first(first: Coords, second: Coords) -> Direction {
+    // panics if coords aren't adjacent
+    if first.y == second.y {
+        // east or west (or invalid)
+        let greater_x = std::cmp::max(first.x, second.x);
+        let lesser_x = std::cmp::min(first.x, second.x);
+        if greater_x - lesser_x == 1 {
+            if greater_x == second.x {
+                return Direction::East;
+            } else {
+                return Direction::West;
+            }
+        }
+    } else if first.x == second.x {
+        // north or south (or invalid)
+        let greater_y = std::cmp::max(first.y, second.y);
+        let lesser_y = std::cmp::min(first.y, second.y);
+        if greater_y - lesser_y == 1 {
+            if greater_y == second.y {
+                return Direction::South;
+            } else {
+                return Direction::North;
+            }
+        }
+    }
+    panic!("Cannot get relative direction of non-adjacent coords");
 }
 
 fn pipe_pairs_align_vertically(
@@ -174,57 +220,47 @@ fn pipe_pairs_align_horizontally(
 }
 
 fn pipe_pair_allows_passage_north_or_south(
-    first: Coords,
-    second: Coords,
-    grid: &Vec<Vec<Tile>>,
+    first_tuple: (Coords, Tile),
+    second_tuple: (Coords, Tile),
 ) -> bool {
-    if first.y != second.y {
-        // invalid pair, forbid passage
-        return false;
-    }
-    let greater = std::cmp::max(first.x, second.x);
-    let lesser = std::cmp::min(first.x, second.x);
-    if greater - lesser != 1 {
-        // invalid pair, forbid passage
-        return false;
-    }
-    let first_tile = grid[first.y][first.x];
-    let second_tile = grid[second.y][second.x];
-    if first.x > second.x {
+    let first = first_tuple.0;
+    let second = second_tuple.0;
+    let first_tile = first_tuple.1;
+    let second_tile = second_tuple.1;
+
+    let direction_of_second_from_first = direction_of_second_from_first(first, second);
+    if direction_of_second_from_first == Direction::West {
         // first is east of second
         !(first_tile.connects_west() && second_tile.connects_east())
-    } else {
+    } else if direction_of_second_from_first == Direction::East {
         !(first_tile.connects_east() && second_tile.connects_west())
+    } else {
+        false
     }
 }
 
 fn pipe_pair_allows_passage_east_or_west(
-    first: Coords,
-    second: Coords,
-    grid: &Vec<Vec<Tile>>,
+    first_tuple: (Coords, Tile),
+    second_tuple: (Coords, Tile),
 ) -> bool {
-    if first.x != second.x {
-        // invalid pair, forbid passage
-        return false;
-    }
-    let greater = std::cmp::max(first.y, second.y);
-    let lesser = std::cmp::min(first.y, second.y);
-    if greater - lesser != 1 {
-        // invalid pair, forbid passage
-        return false;
-    }
-    let first_tile = grid[first.y][first.x];
-    let second_tile = grid[second.y][second.x];
-    if first.y > second.y {
+    let first = first_tuple.0;
+    let second = second_tuple.0;
+    let first_tile = first_tuple.1;
+    let second_tile = second_tuple.1;
+
+    let direction_of_second_from_first = direction_of_second_from_first(first, second);
+    if direction_of_second_from_first == Direction::North {
         // first is south of second
         !(first_tile.connects_north() && second_tile.connects_south())
-    } else {
+    } else if direction_of_second_from_first == Direction::South {
         !(first_tile.connects_south() && second_tile.connects_north())
+    } else {
+        false
     }
 }
 
 fn main() {
-    let file = File::open("resources/sample_5").unwrap();
+    let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
     let mut grid: Vec<Vec<Tile>> = Vec::new();
     let mut visited: Vec<Vec<bool>> = Vec::new();
@@ -384,6 +420,20 @@ fn main() {
     // substitute in the starting tile's real type
     grid[starting_tile_coords.y][starting_tile_coords.x] = *starting_tile_type;
 
+    // set relevant accessibility for all main-loop pipe tiles
+    for coords in main_loop_coords.iter() {
+        accessibilities[coords.y][coords.x] = Some(TileAccessibility::MainLoopPipe);
+    }
+
+    // replace all freestanding pipe pieces with ground for ease of search
+    for y in 0..(grid_max_col_index + 1) {
+        for x in 0..(grid_max_row_index + 1) {
+            if !main_loop_coords.contains(&Coords { x, y }) {
+                grid[y][x] = Tile::Ground;
+            }
+        }
+    }
+
     println!(
         "{}",
         display_grid_with_known_accessibilities(&grid, &accessibilities)
@@ -422,521 +472,256 @@ fn main() {
                             current_searched_pipe_coords.insert((coords, other_pipe));
                         }
 
-                        println!("Checking coords {:?}", coords);
-
-                        let mut northwest_pipe: Option<(Coords, Tile)> = None;
-                        let mut northeast_pipe: Option<(Coords, Tile)> = None;
-                        let mut southwest_pipe: Option<(Coords, Tile)> = None;
-                        let mut southeast_pipe: Option<(Coords, Tile)> = None;
-
-                        if coords.y == 0 {
-                            // the outside is just north of us!
-                            if tile == Tile::Ground {
-                                current_search_connects_to_outside = true;
-                            } else {
-                                if pipe_pair_allows_passage_north_or_south(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                ) {
-                                    current_search_connects_to_outside = true;
-                                } else if !current_search_was_impeded_by_main_loop
-                                    && main_loop_coords.contains(&coords)
-                                {
-                                    current_search_was_impeded_by_main_loop = true;
-                                }
-                            }
-                        } else {
-                            // check northwest
-                            if coords.x > 0 {
-                                let target_coords = Coords {
-                                    x: coords.x - 1,
-                                    y: coords.y - 1,
-                                };
-                                let target_tile = grid[target_coords.y][target_coords.x];
-                                // can only move diagonally from ground to ground
-                                if target_tile == Tile::Ground && tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    northwest_pipe = Some((target_coords, target_tile));
-                                }
-                            }
-                            // check northeast
-                            if coords.x < grid_max_row_index {
-                                let target_coords = Coords {
-                                    x: coords.x + 1,
-                                    y: coords.y - 1,
-                                };
-                                let target_tile = grid[target_coords.y][target_coords.x];
-                                // can only move diagonally from ground to ground
-                                if target_tile == Tile::Ground && tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    northeast_pipe = Some((target_coords, target_tile));
-                                }
-                            }
-                            // check due north
-                            let target_coords = Coords {
+                        let north: Option<(Coords, Tile)> = if coords.y > 0 {
+                            let coords = Coords {
                                 x: coords.x,
                                 y: coords.y - 1,
                             };
-                            let target_tile = grid[target_coords.y][target_coords.x];
-                            // ensure we either aren't squeezed between pipes at all, or are
-                            // squeezed between pipes that allow passage north
-                            if tile == Tile::Ground
-                                || pipe_pair_allows_passage_north_or_south(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                )
-                            {
-                                if target_tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    // we are trying to enter from the south
-                                    if northwest_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_vertically(
-                                                (target_coords, northwest_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_north_or_south(
-                                            target_coords,
-                                            northwest_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    northwest_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-
-                                    if northeast_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_vertically(
-                                                (target_coords, northeast_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_north_or_south(
-                                            target_coords,
-                                            northeast_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    northeast_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if coords.y == grid_max_col_index {
-                            // the outside is just south of us!
-                            if tile == Tile::Ground {
-                                current_search_connects_to_outside = true;
-                            } else {
-                                if pipe_pair_allows_passage_north_or_south(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                ) {
-                                    current_search_connects_to_outside = true;
-                                } else if !current_search_was_impeded_by_main_loop
-                                    && main_loop_coords.contains(&coords)
-                                {
-                                    current_search_was_impeded_by_main_loop = true;
-                                }
-                            }
+                            Some((coords, grid[coords.y][coords.x]))
                         } else {
-                            // check southwest
-                            if coords.x > 0 {
-                                let target_coords = Coords {
-                                    x: coords.x - 1,
-                                    y: coords.y + 1,
-                                };
-                                let target_tile = grid[target_coords.y][target_coords.x];
-                                // can only move diagonally from ground to ground
-                                if target_tile == Tile::Ground && tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    southwest_pipe = Some((target_coords, target_tile));
-                                }
-                            }
-                            // check southeast
-                            if coords.x < grid_max_row_index {
-                                let target_coords = Coords {
-                                    x: coords.x + 1,
-                                    y: coords.y + 1,
-                                };
-                                let target_tile = grid[target_coords.y][target_coords.x];
-                                // can only move diagonally from ground to ground
-                                if target_tile == Tile::Ground && tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    southeast_pipe = Some((target_coords, target_tile));
-                                }
-                            }
-                            // check due south
-                            let target_coords = Coords {
-                                x: coords.x,
-                                y: coords.y + 1,
-                            };
-                            let target_tile = grid[target_coords.y][target_coords.x];
-                            // ensure we either aren't squeezed between pipes at all, or are
-                            // squeezed between pipes that allow passage south
-                            if tile == Tile::Ground
-                                || pipe_pair_allows_passage_north_or_south(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                )
-                            {
-                                if target_tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    // we are trying to enter from the north
-                                    if southwest_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_vertically(
-                                                (target_coords, southwest_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_north_or_south(
-                                            target_coords,
-                                            southwest_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    southwest_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-
-                                    if southeast_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_vertically(
-                                                (target_coords, southeast_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_north_or_south(
-                                            target_coords,
-                                            southeast_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    southeast_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if coords.x == 0 {
-                            // the outside is just west of us!
-                            if tile == Tile::Ground {
-                                current_search_connects_to_outside = true;
-                            } else {
-                                if pipe_pair_allows_passage_east_or_west(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                ) {
-                                    current_search_connects_to_outside = true;
-                                } else if !current_search_was_impeded_by_main_loop
-                                    && main_loop_coords.contains(&coords)
-                                {
-                                    current_search_was_impeded_by_main_loop = true;
-                                }
-                            }
-                        } else {
-                            // check due west
-                            let target_coords = Coords {
+                            None
+                        };
+                        let northwest: Option<(Coords, Tile)> = if coords.y > 0 && coords.x > 0 {
+                            let coords = Coords {
                                 x: coords.x - 1,
-                                y: coords.y,
+                                y: coords.y - 1,
                             };
-                            let target_tile = grid[target_coords.y][target_coords.x];
-                            // ensure we either aren't squeezed between pipes at all, or are
-                            // squeezed between pipes that allow passage west
-                            if tile == Tile::Ground
-                                || pipe_pair_allows_passage_east_or_west(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                )
-                            {
-                                if target_tile == Tile::Ground {
-                                    search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
-                                        additional_pipe_coords: None,
-                                    });
-                                } else {
-                                    // we are trying to enter from the east
-                                    if southwest_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_horizontally(
-                                                (target_coords, southwest_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_east_or_west(
-                                            target_coords,
-                                            southwest_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    southwest_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-
-                                    if northwest_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_horizontally(
-                                                (target_coords, northwest_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_east_or_west(
-                                            target_coords,
-                                            northwest_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    northwest_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if coords.x == grid_max_row_index {
-                            // the outside is just east of us!
-                            if tile == Tile::Ground {
-                                current_search_connects_to_outside = true;
-                            } else {
-                                if pipe_pair_allows_passage_east_or_west(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                ) {
-                                    current_search_connects_to_outside = true;
-                                } else if !current_search_was_impeded_by_main_loop
-                                    && main_loop_coords.contains(&coords)
-                                {
-                                    current_search_was_impeded_by_main_loop = true;
-                                }
-                            }
+                            Some((coords, grid[coords.y][coords.x]))
                         } else {
-                            // check due east
-                            let target_coords = Coords {
+                            None
+                        };
+                        let northeast: Option<(Coords, Tile)> =
+                            if coords.y > 0 && coords.x < grid_max_row_index {
+                                let coords = Coords {
+                                    x: coords.x + 1,
+                                    y: coords.y - 1,
+                                };
+                                Some((coords, grid[coords.y][coords.x]))
+                            } else {
+                                None
+                            };
+                        let east: Option<(Coords, Tile)> = if coords.x < grid_max_row_index {
+                            let coords = Coords {
                                 x: coords.x + 1,
                                 y: coords.y,
                             };
-                            let target_tile = grid[target_coords.y][target_coords.x];
-                            // ensure we either aren't squeezed between pipes at all, or are
-                            // squeezed between pipes that allow passage east
-                            if tile == Tile::Ground
-                                || pipe_pair_allows_passage_east_or_west(
-                                    coords,
-                                    coords_maybe_pipe.additional_pipe_coords.unwrap(),
-                                    &grid,
-                                )
+                            Some((coords, grid[coords.y][coords.x]))
+                        } else {
+                            None
+                        };
+                        let west: Option<(Coords, Tile)> = if coords.x > 0 {
+                            let coords = Coords {
+                                x: coords.x - 1,
+                                y: coords.y,
+                            };
+                            Some((coords, grid[coords.y][coords.x]))
+                        } else {
+                            None
+                        };
+                        let south: Option<(Coords, Tile)> = if coords.y < grid_max_col_index {
+                            let coords = Coords {
+                                x: coords.x,
+                                y: coords.y + 1,
+                            };
+                            Some((coords, grid[coords.y][coords.x]))
+                        } else {
+                            None
+                        };
+                        let southwest: Option<(Coords, Tile)> =
+                            if coords.y < grid_max_col_index && coords.x > 0 {
+                                let coords = Coords {
+                                    x: coords.x - 1,
+                                    y: coords.y + 1,
+                                };
+                                Some((coords, grid[coords.y][coords.x]))
+                            } else {
+                                None
+                            };
+                        let southeast: Option<(Coords, Tile)> =
+                            if coords.y < grid_max_col_index && coords.x < grid_max_row_index {
+                                let coords = Coords {
+                                    x: coords.x + 1,
+                                    y: coords.y + 1,
+                                };
+                                Some((coords, grid[coords.y][coords.x]))
+                            } else {
+                                None
+                            };
+                        let adjacent_tiles = vec![
+                            northwest, north, northeast, east, southeast, south, southwest, west,
+                        ];
+
+                        let defined_adjacent_tiles = adjacent_tiles
+                            .iter()
+                            .filter(|i| i.is_some())
+                            .map(|i| i.unwrap())
+                            .collect::<Vec<_>>();
+
+                        // starting from ground tile
+                        if tile == Tile::Ground {
+                            // first: detect whether we've reached the edge of the map
+                            if north.is_none()
+                                || south.is_none()
+                                || east.is_none()
+                                || west.is_none()
                             {
-                                if target_tile == Tile::Ground {
+                                current_search_connects_to_outside = true;
+                            }
+                            // case 1: from ground tile to ground tile
+                            for adjacent in defined_adjacent_tiles {
+                                if adjacent.1 == Tile::Ground {
                                     search_stack.push(CoordsMaybePipe {
-                                        coords: target_coords,
+                                        coords: adjacent.0,
+                                        additional_pipe_coords: None,
+                                    })
+                                }
+                            }
+                            // case 2: from ground tile to pipe gap
+                            for pair in adjacent_tiles.windows(2) {
+                                if allows_passage_between(pair[0], pair[1]) {
+                                    search_stack.push(CoordsMaybePipe {
+                                        coords: pair[0].unwrap().0,
+                                        additional_pipe_coords: Some(pair[1].unwrap().0),
+                                    })
+                                }
+                            }
+                        }
+
+                        // starting from a pipe pair that we're actively squeezed between
+                        if tile != Tile::Ground {
+                            let paired_pipe_coords =
+                                coords_maybe_pipe.additional_pipe_coords.unwrap();
+                            let paired_pipe_tile = grid[paired_pipe_coords.y][paired_pipe_coords.x];
+                            let paired_pipe = (paired_pipe_coords, paired_pipe_tile);
+                            // first: detect whether we've reached the edge of the map
+                            if ((north.is_none() || south.is_none())
+                                && pipe_pair_allows_passage_north_or_south(
+                                    (coords, tile),
+                                    paired_pipe,
+                                ))
+                                || ((west.is_none() || east.is_none())
+                                    && pipe_pair_allows_passage_east_or_west(
+                                        (coords, tile),
+                                        paired_pipe,
+                                    ))
+                            {
+                                current_search_connects_to_outside = true;
+                            }
+                            let direction_of_adj_pipe_from_main =
+                                direction_of_second_from_first(coords, paired_pipe_coords);
+                            if pipe_pair_allows_passage_north_or_south((coords, tile), paired_pipe)
+                            {
+                                // case 3a: from pipe pair to ground tiles, north-south
+                                let mut eligible_adjacents = vec![north, south];
+                                if direction_of_adj_pipe_from_main == Direction::East {
+                                    eligible_adjacents.push(northeast);
+                                    eligible_adjacents.push(southeast);
+                                } else if direction_of_adj_pipe_from_main == Direction::West {
+                                    eligible_adjacents.push(northwest);
+                                    eligible_adjacents.push(southwest);
+                                }
+                                let eligible_adj_ground_coords = eligible_adjacents
+                                    .iter()
+                                    .filter(|maybe_tup| {
+                                        maybe_tup.is_some() && maybe_tup.unwrap().1 == Tile::Ground
+                                    })
+                                    .map(|maybe_tup| maybe_tup.unwrap().0)
+                                    .collect::<Vec<_>>();
+                                for adj_ground_coords in eligible_adj_ground_coords {
+                                    search_stack.push(CoordsMaybePipe {
+                                        coords: adj_ground_coords,
                                         additional_pipe_coords: None,
                                     });
-                                } else {
-                                    // we are trying to enter from the west
-                                    if southeast_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_horizontally(
-                                                (target_coords, southeast_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_east_or_west(
-                                            target_coords,
-                                            southeast_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    southeast_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
-
-                                    if northeast_pipe.is_some()
-                                        && (tile == Tile::Ground
-                                            || pipe_pairs_align_horizontally(
-                                                (target_coords, northeast_pipe.unwrap().0),
-                                                (
-                                                    coords,
-                                                    coords_maybe_pipe
-                                                        .additional_pipe_coords
-                                                        .unwrap(),
-                                                ),
-                                            ))
-                                    {
-                                        if pipe_pair_allows_passage_east_or_west(
-                                            target_coords,
-                                            northeast_pipe.unwrap().0,
-                                            &grid,
-                                        ) {
-                                            // successfully squeezing between pipes
-                                            search_stack.push(CoordsMaybePipe {
-                                                coords: target_coords,
-                                                additional_pipe_coords: Some(
-                                                    northeast_pipe.unwrap().0,
-                                                ),
-                                            });
-                                        } else {
-                                            // blocked!
-                                            if !current_search_was_impeded_by_main_loop
-                                                && main_loop_coords.contains(&target_coords)
-                                            {
-                                                current_search_was_impeded_by_main_loop = true;
-                                            }
-                                        }
-                                    }
+                                }
+                                // case 4a: from pipe pair to pipe pair, originating north-south
+                                let possible_adj_pipe_pairs =
+                                    if direction_of_adj_pipe_from_main == Direction::East {
+                                        vec![
+                                            (north, northeast),
+                                            (Some((coords, tile)), north), // 90-degree turn
+                                            (northeast, Some(paired_pipe)), // 90-degree turn
+                                            (south, southeast),
+                                            (Some((coords, tile)), south), // 90-degree turn
+                                            (southeast, Some(paired_pipe)), // 90-degree turn
+                                        ]
+                                    } else if direction_of_adj_pipe_from_main == Direction::West {
+                                        vec![
+                                            (northwest, north),
+                                            (Some(paired_pipe), northwest), // 90-degree turn
+                                            (Some((coords, tile)), north),  // 90-degree turn
+                                            (southwest, south),
+                                            (Some(paired_pipe), southwest), // 90-degree turn
+                                            (Some((coords, tile)), south),  // 90-degree turn
+                                        ]
+                                    } else {
+                                        Vec::new()
+                                    };
+                                let filtered_pairs =
+                                    possible_adj_pipe_pairs.iter().filter(|(first, second)| {
+                                        allows_passage_between(*first, *second)
+                                    });
+                                for pair in filtered_pairs {
+                                    search_stack.push(CoordsMaybePipe {
+                                        coords: pair.0.unwrap().0,
+                                        additional_pipe_coords: Some(pair.1.unwrap().0),
+                                    })
+                                }
+                            }
+                            if pipe_pair_allows_passage_east_or_west((coords, tile), paired_pipe) {
+                                // case 3b: from pipe pair to ground tiles, east-west
+                                let mut eligible_adjacents = vec![east, west];
+                                if direction_of_adj_pipe_from_main == Direction::North {
+                                    eligible_adjacents.push(northeast);
+                                    eligible_adjacents.push(northwest);
+                                } else if direction_of_adj_pipe_from_main == Direction::South {
+                                    eligible_adjacents.push(southeast);
+                                    eligible_adjacents.push(southwest);
+                                }
+                                let eligible_adj_ground_coords = eligible_adjacents
+                                    .iter()
+                                    .filter(|maybe_tup| {
+                                        maybe_tup.is_some() && maybe_tup.unwrap().1 == Tile::Ground
+                                    })
+                                    .map(|maybe_tup| maybe_tup.unwrap().0)
+                                    .collect::<Vec<_>>();
+                                for adj_ground_coords in eligible_adj_ground_coords {
+                                    search_stack.push(CoordsMaybePipe {
+                                        coords: adj_ground_coords,
+                                        additional_pipe_coords: None,
+                                    });
+                                }
+                                // case 4b: from pipe pair to pipe pair, originating east-west
+                                let possible_adj_pipe_pairs =
+                                    if direction_of_adj_pipe_from_main == Direction::North {
+                                        vec![
+                                            (east, northeast),
+                                            (Some((coords, tile)), east), // 90-degree turn
+                                            (Some(paired_pipe), northeast), // 90-degree turn
+                                            (west, northwest),
+                                            (Some((coords, tile)), west), // 90-degree turn
+                                            (Some(paired_pipe), northwest), // 90-degree turn
+                                        ]
+                                    } else if direction_of_adj_pipe_from_main == Direction::South {
+                                        vec![
+                                            (east, southeast),
+                                            (Some((coords, tile)), east), // 90-degree turn
+                                            (Some(paired_pipe), southeast), // 90-degree turn
+                                            (west, southwest),
+                                            (Some((coords, tile)), west), // 90-degree turn
+                                            (Some(paired_pipe), southwest), // 90-degree turn
+                                        ]
+                                    } else {
+                                        Vec::new()
+                                    };
+                                let filtered_pairs =
+                                    possible_adj_pipe_pairs.iter().filter(|(first, second)| {
+                                        allows_passage_between(*first, *second)
+                                    });
+                                for pair in filtered_pairs {
+                                    search_stack.push(CoordsMaybePipe {
+                                        coords: pair.0.unwrap().0,
+                                        additional_pipe_coords: Some(pair.1.unwrap().0),
+                                    })
                                 }
                             }
                         }
@@ -945,24 +730,21 @@ fn main() {
                     // Update 'accessibilities' grid based on search results
                     let searched_ground_type = if current_search_connects_to_outside {
                         TileAccessibility::UnenclosedGround
-                    } else if current_search_was_impeded_by_main_loop {
-                        TileAccessibility::MainLoopEnclosedGround
                     } else {
-                        TileAccessibility::OtherEnclosedGround
+                        TileAccessibility::MainLoopEnclosedGround
                     };
                     for coords in current_searched_ground_coords {
                         accessibilities[coords.y][coords.x] = Some(searched_ground_type);
                     }
-                } else {
-                    accessibilities[y][x] = Some(TileAccessibility::Pipe);
                 }
-                println!(
-                    "{}",
-                    display_grid_with_known_accessibilities(&grid, &accessibilities)
-                );
             }
         }
     }
+
+    println!(
+        "{}",
+        display_grid_with_known_accessibilities(&grid, &accessibilities)
+    );
 
     let num_main_loop_enclosed_ground_tiles = accessibilities
         .iter()
