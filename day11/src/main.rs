@@ -12,7 +12,7 @@ fn expand_universe_by_factor(
     galaxy_ids_to_coords: &HashMap<usize, Coords>,
     indexes_to_insert_column_after: &[usize],
     indexes_to_insert_row_after: &[usize],
-    factor: usize,
+    expansion_factor: usize,
 ) -> HashMap<usize, Coords> {
     galaxy_ids_to_coords
         .iter()
@@ -28,8 +28,8 @@ fn expand_universe_by_factor(
             (
                 *id,
                 Coords {
-                    x: c.x + (extra_columns_to_left * factor),
-                    y: c.y + (extra_rows_below * factor),
+                    x: c.x + (extra_columns_to_left * (expansion_factor - 1)),
+                    y: c.y + (extra_rows_below * (expansion_factor - 1)),
                 },
             )
         })
@@ -107,7 +107,7 @@ fn main() {
         &galaxy_ids_to_unexpanded_coords,
         &indexes_to_insert_column_after,
         &indexes_to_insert_row_after,
-        1,
+        2,
     );
     let part_1_solution = calculate_total_distance(&part_1_galaxy_ids_to_expanded_coords);
     println!("Part 1 solution: {part_1_solution}");
@@ -116,7 +116,7 @@ fn main() {
         &galaxy_ids_to_unexpanded_coords,
         &indexes_to_insert_column_after,
         &indexes_to_insert_row_after,
-        999999,
+        1000000,
     );
     let part_2_solution = calculate_total_distance(&part_2_galaxy_ids_to_expanded_coords);
     println!("Part 2 solution: {part_2_solution}");
