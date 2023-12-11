@@ -8,6 +8,60 @@ struct Coords {
     y: usize,
 }
 
+fn expand_universe_by_factor(
+    galaxy_ids_to_coords: &HashMap<usize, Coords>,
+    indexes_to_insert_column_after: &[usize],
+    indexes_to_insert_row_after: &[usize],
+    factor: usize,
+) -> HashMap<usize, Coords> {
+    galaxy_ids_to_coords
+        .iter()
+        .map(|(id, c)| {
+            let extra_columns_to_left = indexes_to_insert_column_after
+                .iter()
+                .filter(|x| **x < c.x)
+                .count();
+            let extra_rows_below = indexes_to_insert_row_after
+                .iter()
+                .filter(|y| **y < c.y)
+                .count();
+            (
+                *id,
+                Coords {
+                    x: c.x + (extra_columns_to_left * factor),
+                    y: c.y + (extra_rows_below * factor),
+                },
+            )
+        })
+        .collect()
+}
+
+fn calculate_total_distance(galaxy_ids_to_coords: &HashMap<usize, Coords>) -> usize {
+    let max_galaxy_id = galaxy_ids_to_coords.len();
+    let mut galaxy_id_pairs: Vec<(usize, usize)> = Vec::new();
+    for first_id in 1..max_galaxy_id {
+        for second_id in (first_id + 1)..(max_galaxy_id + 1) {
+            galaxy_id_pairs.push((first_id, second_id));
+        }
+    }
+
+    let galaxy_id_pairs_to_min_distances: HashMap<(usize, usize), usize> = galaxy_id_pairs
+        .into_iter()
+        .map(|id_pair| {
+            let first_coords = galaxy_ids_to_coords.get(&id_pair.0).unwrap();
+            let second_coords = galaxy_ids_to_coords.get(&id_pair.1).unwrap();
+            let greater_x = std::cmp::max(first_coords.x, second_coords.x);
+            let lesser_x = std::cmp::min(first_coords.x, second_coords.x);
+            let greater_y = std::cmp::max(first_coords.y, second_coords.y);
+            let lesser_y = std::cmp::min(first_coords.y, second_coords.y);
+            let distance = (greater_x - lesser_x) + (greater_y - lesser_y);
+            (id_pair, distance)
+        })
+        .collect();
+
+    galaxy_id_pairs_to_min_distances.values().sum::<usize>()
+}
+
 fn main() {
     let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
@@ -49,49 +103,21 @@ fn main() {
         }
     }
 
-    let galaxy_ids_to_expanded_coords: HashMap<usize, Coords> = galaxy_ids_to_unexpanded_coords
-        .into_iter()
-        .map(|(id, c)| {
-            let extra_columns_to_left = indexes_to_insert_column_after
-                .iter()
-                .filter(|x| **x < c.x)
-                .count();
-            let extra_rows_below = indexes_to_insert_row_after
-                .iter()
-                .filter(|y| **y < c.y)
-                .count();
-            (
-                id,
-                Coords {
-                    x: c.x + extra_columns_to_left,
-                    y: c.y + extra_rows_below,
-                },
-            )
-        })
-        .collect();
+    let part_1_galaxy_ids_to_expanded_coords = expand_universe_by_factor(
+        &galaxy_ids_to_unexpanded_coords,
+        &indexes_to_insert_column_after,
+        &indexes_to_insert_row_after,
+        1,
+    );
+    let part_1_solution = calculate_total_distance(&part_1_galaxy_ids_to_expanded_coords);
+    println!("Part 1 solution: {part_1_solution}");
 
-    let max_galaxy_id = galaxy_ids_to_expanded_coords.len();
-    let mut galaxy_id_pairs: Vec<(usize, usize)> = Vec::new();
-    for first_id in 1..max_galaxy_id {
-        for second_id in (first_id + 1)..(max_galaxy_id + 1) {
-            galaxy_id_pairs.push((first_id, second_id));
-        }
-    }
-
-    let galaxy_id_pairs_to_min_distances: HashMap<(usize, usize), usize> = galaxy_id_pairs
-        .into_iter()
-        .map(|id_pair| {
-            let first_coords = galaxy_ids_to_expanded_coords.get(&id_pair.0).unwrap();
-            let second_coords = galaxy_ids_to_expanded_coords.get(&id_pair.1).unwrap();
-            let greater_x = std::cmp::max(first_coords.x, second_coords.x);
-            let lesser_x = std::cmp::min(first_coords.x, second_coords.x);
-            let greater_y = std::cmp::max(first_coords.y, second_coords.y);
-            let lesser_y = std::cmp::min(first_coords.y, second_coords.y);
-            let distance = (greater_x - lesser_x) + (greater_y - lesser_y);
-            (id_pair, distance)
-        })
-        .collect();
-
-    let combined_distances = galaxy_id_pairs_to_min_distances.values().sum::<usize>();
-    println!("Part 1 solution: {combined_distances}");
+    let part_2_galaxy_ids_to_expanded_coords = expand_universe_by_factor(
+        &galaxy_ids_to_unexpanded_coords,
+        &indexes_to_insert_column_after,
+        &indexes_to_insert_row_after,
+        999999,
+    );
+    let part_2_solution = calculate_total_distance(&part_2_galaxy_ids_to_expanded_coords);
+    println!("Part 2 solution: {part_2_solution}");
 }
