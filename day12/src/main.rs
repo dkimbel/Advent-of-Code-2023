@@ -55,21 +55,28 @@ impl ContiguousConditions {
 }
 
 fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &[u32]) -> usize {
-    // println!(
-    //     "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
-    //     conditions, contiguous_damaged_counts
-    // );
-    // Base cases (success)
+    println!(
+        "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
+        conditions, contiguous_damaged_counts
+    );
+    // Base cases
     if contiguous_damaged_counts.is_empty() {
-        // println!("Returning 1!");
-        return 1;
+        if conditions.iter().any(|c| *c == Condition::Damaged) {
+            // we failed to account for at least one damaged tile
+            println!("Returning 0");
+            return 0;
+        } else {
+            // success!
+            println!("Returning 1!");
+            return 1;
+        }
     }
 
     // Heuristic / base case: there aren't enough tiles left for success to be possible
     let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
         + (contiguous_damaged_counts.len() - 1);
     if conditions.len() < num_remaining_conditions_required {
-        // println!("Returning 0");
+        println!("Returning 0");
         return 0;
     }
 
@@ -212,7 +219,7 @@ impl Row {
 }
 
 fn main() {
-    let file = File::open("resources/input_1").unwrap();
+    let file = File::open("resources/sample_3").unwrap();
     let reader = BufReader::new(file);
 
     let mut rows: Vec<Row> = Vec::new();
@@ -235,7 +242,14 @@ fn main() {
 
     let total_valid_arrangements = rows
         .iter()
-        .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
+        // .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
+        .map(|row| {
+            // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
+            let num_arrangements =
+                num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
+            // println!("{:?} {}", row, num_arrangements);
+            num_arrangements
+        })
         .sum::<usize>();
-    println!("Part 2 solution: {total_valid_arrangements}");
+    println!("Part 1 solution: {total_valid_arrangements}");
 }
