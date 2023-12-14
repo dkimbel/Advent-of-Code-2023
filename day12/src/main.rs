@@ -55,19 +55,19 @@ impl ContiguousConditions {
 }
 
 fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &[u32]) -> usize {
-    println!(
-        "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
-        conditions, contiguous_damaged_counts
-    );
+    // println!(
+    //     "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
+    //     conditions, contiguous_damaged_counts
+    // );
     // Base cases
     if contiguous_damaged_counts.is_empty() {
         if conditions.iter().any(|c| *c == Condition::Damaged) {
             // we failed to account for at least one damaged tile
-            println!("Returning 0");
+            // println!("Returning 0");
             return 0;
         } else {
             // success!
-            println!("Returning 1!");
+            // println!("Returning 1!");
             return 1;
         }
     }
@@ -76,7 +76,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
         + (contiguous_damaged_counts.len() - 1);
     if conditions.len() < num_remaining_conditions_required {
-        println!("Returning 0");
+        // println!("Returning 0");
         return 0;
     }
 
@@ -87,8 +87,8 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let mut i = 0;
     let mut maybe_streak_start_i = None;
     let mut streak_len: usize = 0;
-    let mut streak_len_since_known_damaged_inclusive = 0;
     let mut streak_has_known_damaged = false;
+    let mut still_check_streak_incremented_by_one_from = None;
     while i < conditions.len() {
         let condition = conditions[i];
         if condition == Condition::Operational {
@@ -108,14 +108,12 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
                 }
             }
         } else {
+            // TODO as soon as streak is one greater than allowed, MUST stop
+            //   BUT: will this ruin my +1?
             if condition == Condition::Damaged {
                 streak_has_known_damaged = true;
             }
             streak_len += 1;
-            if streak_has_known_damaged {
-                // "inclusive" as in "this len counts that initial damaged tile"
-                streak_len_since_known_damaged_inclusive += 1;
-            }
             if maybe_streak_start_i == None {
                 maybe_streak_start_i = Some(i)
             }
@@ -123,11 +121,11 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
                 // effectively transform the last character of the streak from '?' to '.',
                 // successfully ending it
                 break;
-            } else if condition == Condition::Damaged
-                && streak_len_since_known_damaged_inclusive > needed_damaged_count
-            {
+            } else if condition == Condition::Damaged && streak_len > needed_damaged_count {
                 // there were too damaged tiles in this streak, and we weren't able to split them
                 // apart in a way that meets requirements
+                still_check_streak_incremented_by_one_from = maybe_streak_start_i;
+                maybe_streak_start_i = None; // indicate failure
                 break;
             }
         }
@@ -135,7 +133,16 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     }
 
     match maybe_streak_start_i {
-        None => return 0,
+        None => {
+            if still_check_streak_incremented_by_one_from.is_some() {
+                return num_valid_arrangements(
+                    &conditions[still_check_streak_incremented_by_one_from.unwrap() + 1..],
+                    &contiguous_damaged_counts,
+                );
+            } else {
+                return 0;
+            }
+        }
         Some(streak_start_i) => {
             // take up to two actions:
             // 1. claim the streak we found above (always)
@@ -219,7 +226,7 @@ impl Row {
 }
 
 fn main() {
-    let file = File::open("resources/sample_3").unwrap();
+    let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
 
     let mut rows: Vec<Row> = Vec::new();
