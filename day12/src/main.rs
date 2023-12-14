@@ -55,13 +55,13 @@ impl ContiguousConditions {
 }
 
 fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &[u32]) -> usize {
-    println!(
-        "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
-        conditions, contiguous_damaged_counts
-    );
+    // println!(
+    //     "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
+    //     conditions, contiguous_damaged_counts
+    // );
     // Base cases (success)
     if contiguous_damaged_counts.is_empty() {
-        println!("Returning 1!");
+        // println!("Returning 1!");
         return 1;
     }
 
@@ -69,7 +69,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
         + (contiguous_damaged_counts.len() - 1);
     if conditions.len() < num_remaining_conditions_required {
-        println!("Returning 0");
+        // println!("Returning 0");
         return 0;
     }
 
@@ -112,10 +112,9 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
             if maybe_streak_start_i == None {
                 maybe_streak_start_i = Some(i)
             }
-            // important that this comes after the code above, which increased the length of our
-            // 'streak' -- here we may effectively transform the last character of the streak from
-            // a '?' to a '.', which counts as consuming part of it
-            if condition == Condition::Unknown && streak_len >= needed_damaged_count {
+            if condition == Condition::Unknown && streak_len == needed_damaged_count + 1 {
+                // effectively transform the last character of the streak from '?' to '.',
+                // successfully ending it
                 break;
             } else if condition == Condition::Damaged
                 && streak_len_since_known_damaged_inclusive > needed_damaged_count
@@ -213,7 +212,7 @@ impl Row {
 }
 
 fn main() {
-    let file = File::open("resources/sample_2").unwrap();
+    let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
 
     let mut rows: Vec<Row> = Vec::new();
@@ -234,15 +233,9 @@ fn main() {
         });
     }
 
-    // let total_valid_arrangements = rows
-    //     .iter()
-    //     .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
-    //     .sum::<usize>();
-    let valid_arrangements = rows
+    let total_valid_arrangements = rows
         .iter()
         .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
-        .collect::<Vec<_>>();
-    dbg!(&valid_arrangements);
-    let total_valid_arrangements = valid_arrangements.iter().sum::<usize>();
+        .sum::<usize>();
     println!("Part 2 solution: {total_valid_arrangements}");
 }
