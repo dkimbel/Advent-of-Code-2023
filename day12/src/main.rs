@@ -243,6 +243,7 @@ fn main() {
     let reader = BufReader::new(file);
 
     let mut rows: Vec<Row> = Vec::new();
+    let mut expanded_rows: Vec<Row> = Vec::new();
     for line in reader.lines() {
         let line_content = &line.unwrap();
         let split = line_content.split_whitespace().collect::<Vec<_>>();
@@ -255,8 +256,24 @@ fn main() {
             .map(|n| n.parse::<u32>().unwrap())
             .collect::<Vec<_>>();
         rows.push(Row {
-            conditions,
-            contiguous_damaged_counts,
+            conditions: conditions.clone(),
+            contiguous_damaged_counts: contiguous_damaged_counts.clone(),
+        });
+        // janky 'intersperse'
+        let mut expanded_conditions: Vec<Condition> = Vec::new();
+        for i in 0..5 {
+            expanded_conditions.extend(&conditions);
+            if i < 4 {
+                expanded_conditions.push(Condition::Unknown);
+            }
+        }
+        let mut expanded_damage_counts: Vec<u32> = Vec::new();
+        for _ in 0..5 {
+            expanded_damage_counts.extend(&contiguous_damaged_counts);
+        }
+        expanded_rows.push(Row {
+            conditions: expanded_conditions,
+            contiguous_damaged_counts: expanded_damage_counts,
         });
     }
 
@@ -267,9 +284,22 @@ fn main() {
             // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
             let num_arrangements =
                 num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
-            println!("{:?} {}", row, num_arrangements);
+            // println!("{:?} {}", row, num_arrangements);
             num_arrangements
         })
         .sum::<usize>();
     println!("Part 1 solution: {total_valid_arrangements}");
+
+    let total_valid_expanded_arrangements = expanded_rows
+        .iter()
+        // .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
+        .map(|row| {
+            // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
+            let num_arrangements =
+                num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
+            // println!("{:?} {}", row, num_arrangements);
+            num_arrangements
+        })
+        .sum::<usize>();
+    println!("Part 2 solution: {total_valid_expanded_arrangements}");
 }
