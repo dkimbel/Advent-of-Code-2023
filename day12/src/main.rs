@@ -76,7 +76,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
         + (contiguous_damaged_counts.len() - 1);
     if conditions.len() < num_remaining_conditions_required {
-        // println!("Returning 0");
+        // println!("Returning 0 from heuristic");
         return 0;
     }
 
@@ -88,11 +88,13 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let mut maybe_streak_start_i = None;
     let mut streak_len: usize = 0;
     let mut streak_has_known_damaged = false;
-    let mut still_check_streak_incremented_by_one_from = None;
+    // let mut still_check_streak_incremented_by_one_from = None;
     while i < conditions.len() {
         let condition = conditions[i];
         if condition == Condition::Operational {
             if streak_len >= needed_damaged_count {
+                // arguably we should increment streak_len here, but we'll definitely move past
+                // this 'operational' tile next iteration anyway
                 break;
             } else {
                 // Here we _potentially_ reset, figuring that we can safely skip the whole streak
@@ -104,6 +106,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
                 maybe_streak_start_i = None;
                 streak_len = 0;
                 if streak_has_known_damaged {
+                    // still_check_streak_incremented_by_one_from = None;
                     break;
                 }
             }
@@ -124,21 +127,31 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
             } else if condition == Condition::Damaged && streak_len > needed_damaged_count {
                 // there were too damaged tiles in this streak, and we weren't able to split them
                 // apart in a way that meets requirements
-                still_check_streak_incremented_by_one_from = maybe_streak_start_i;
+                // still_check_streak_incremented_by_one_from = maybe_streak_start_i;
                 maybe_streak_start_i = None; // indicate failure
                 break;
             }
+        }
+        if i == conditions.len() - 1 {
+            // We've reached the end of the whole list of remaining conditions. If we've found a
+            // streak of the right size, return success.
+            if maybe_streak_start_i.is_some() && streak_len >= needed_damaged_count {
+                break;
+            }
+            // Failure case
+            maybe_streak_start_i = None; // indicate failure
+            break;
         }
         i += 1;
     }
 
     match maybe_streak_start_i {
         None => {
-            if still_check_streak_incremented_by_one_from.is_some() {
-                return num_valid_arrangements(
-                    &conditions[still_check_streak_incremented_by_one_from.unwrap() + 1..],
-                    &contiguous_damaged_counts,
-                );
+            // if still_check_streak_incremented_by_one_from.is_some() {
+            let initial_condition = &conditions[0];
+            if initial_condition != &Condition::Damaged {
+                // TODO avoid this if it tanks performance?
+                return num_valid_arrangements(&conditions[1..], &contiguous_damaged_counts);
             } else {
                 return 0;
             }
@@ -254,7 +267,7 @@ fn main() {
             // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
             let num_arrangements =
                 num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
-            // println!("{:?} {}", row, num_arrangements);
+            println!("{:?} {}", row, num_arrangements);
             num_arrangements
         })
         .sum::<usize>();
