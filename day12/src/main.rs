@@ -20,6 +20,7 @@ impl Condition {
 }
 
 fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &[u32]) -> usize {
+    // println!("{:?} {:?}", conditions, contiguous_damaged_counts);
     // Base cases
     if contiguous_damaged_counts.is_empty() {
         if conditions.iter().any(|c| *c == Condition::Damaged) {
@@ -27,13 +28,18 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
             return 0;
         } else {
             // success!
+            // println!("Returning 1!");
             return 1;
         }
     }
 
     // Heuristic / base case: there aren't enough tiles left for success to be possible
-    let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
-        + (contiguous_damaged_counts.len() - 1);
+    let num_conditions_required_after_first = contiguous_damaged_counts[1..]
+        .iter()
+        .map(|n| n + 1) // + 1 represents the one tile we'd need to break up every damage streak
+        .sum::<u32>() as usize;
+    let num_remaining_conditions_required =
+        contiguous_damaged_counts[0] as usize + num_conditions_required_after_first;
     if conditions.len() < num_remaining_conditions_required {
         return 0;
     }
@@ -46,8 +52,14 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let mut maybe_streak_start_i = None;
     let mut streak_len: usize = 0;
     let mut streak_has_known_damaged = false;
+    let mut must_claim_extra_tile = false;
     let mut still_check_streak_incremented_by_one_from = None;
-    while i < conditions.len() {
+    // TODO make everything work with this 'after first' heuristic
+    // the removal of num_conditions_required_after_first is particularly effective since we
+    // stripped extra 'operational' tiles during parsing
+    let max_i_to_consider = conditions.len() - num_conditions_required_after_first - 1;
+    // println!("Considering {:?}", &conditions[0..max_i_to_consider + 1]);
+    while i <= max_i_to_consider {
         let condition = conditions[i];
         if condition == Condition::Operational {
             if streak_len >= needed_damaged_count {
@@ -88,11 +100,24 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
                 break;
             }
         }
-        if i == conditions.len() - 1 {
-            // We've reached the end of the whole list of remaining conditions. If we've found a
-            // streak of the right size, return success.
+        if i == max_i_to_consider {
+            // We've reached the end of section we can reasonably consider. If we've found a
+            // streak of the right size AND this is a safe stopping place, return success. "A
+            // safe stopping place" is either the end of the whole conditions list, or the
+            // end of our "reasonable consideration" section if the next tile after it is
+            // Operational.
             if maybe_streak_start_i.is_some() && streak_len >= needed_damaged_count {
-                break;
+                if i == conditions.len() - 1 {
+                    // we're at end of whole list
+                    break;
+                } else {
+                    if conditions[max_i_to_consider + 1] != Condition::Damaged {
+                        // next tile would actually give us a safe stopping place, but we have
+                        // to consume it
+                        must_claim_extra_tile = true;
+                        break;
+                    }
+                }
             }
             // Failure case
             maybe_streak_start_i = None; // indicate failure
@@ -119,7 +144,8 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
             // 1. claim the streak we found above (always)
             // 2. swap in '.' for the first '?', IF the '?' is the very first character (else this
             //    would create an unwanted initial streak of damaged)
-            let streak_end_i = streak_start_i + streak_len;
+            let maybe_extra_tile = if must_claim_extra_tile { 1 } else { 0 };
+            let streak_end_i = streak_start_i + streak_len + maybe_extra_tile;
             let num_arrangements_after_streak = num_valid_arrangements(
                 &conditions[streak_end_i..],
                 &contiguous_damaged_counts[1..],
@@ -173,12 +199,29 @@ fn main() {
                 expanded_conditions.push(Condition::Unknown);
             }
         }
+        let mut pared_expanded_conditions: Vec<Condition> = Vec::new();
+        let mut last_ele_was_operational = false;
+        for (i, cond) in expanded_conditions.iter().enumerate() {
+            let eligible_to_strip_operational =
+                i == 0 || i == expanded_conditions.len() - 1 || last_ele_was_operational;
+            if eligible_to_strip_operational && *cond == Condition::Operational {
+                last_ele_was_operational = true;
+                continue;
+            } else {
+                if *cond == Condition::Operational {
+                    last_ele_was_operational = true;
+                } else {
+                    last_ele_was_operational = false;
+                }
+                pared_expanded_conditions.push(*cond);
+            }
+        }
         let mut expanded_damage_counts: Vec<u32> = Vec::new();
         for _ in 0..5 {
             expanded_damage_counts.extend(&contiguous_damaged_counts);
         }
         expanded_rows.push(Row {
-            conditions: expanded_conditions,
+            conditions: pared_expanded_conditions,
             contiguous_damaged_counts: expanded_damage_counts,
         });
     }
@@ -198,12 +241,13 @@ fn main() {
 
     let total_valid_expanded_arrangements = expanded_rows
         .iter()
+        .enumerate()
         // .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
-        .map(|row| {
+        .map(|(i, row)| {
             // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
             let num_arrangements =
                 num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
-            // println!("{:?} {}", row, num_arrangements);
+            println!("{} {}", i, num_arrangements);
             num_arrangements
         })
         .sum::<usize>();
