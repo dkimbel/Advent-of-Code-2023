@@ -19,55 +19,14 @@ impl Condition {
     }
 }
 
-#[derive(Debug)]
-struct ContiguousConditions {
-    condition: Condition,
-    num: u32,
-}
-
-impl ContiguousConditions {
-    fn vec_from_conditions_vec(conditions: Vec<Condition>) -> Vec<ContiguousConditions> {
-        let mut contiguous_conditions = Vec::new();
-        let mut curr_count = 1;
-        let mut curr_condition = conditions[0];
-        for (i, condition) in conditions.iter().enumerate().skip(1) {
-            if *condition == curr_condition {
-                curr_count += 1;
-            } else {
-                contiguous_conditions.push(ContiguousConditions {
-                    condition: curr_condition,
-                    num: curr_count,
-                });
-                curr_count = 1;
-                curr_condition = *condition;
-            }
-
-            if i == conditions.len() - 1 {
-                // we've reached the last condition
-                contiguous_conditions.push(ContiguousConditions {
-                    condition: curr_condition,
-                    num: curr_count,
-                });
-            }
-        }
-        contiguous_conditions
-    }
-}
-
 fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &[u32]) -> usize {
-    // println!(
-    //     "In fn! conditions: {:?}, contiguous_damaged_counts: {:?}",
-    //     conditions, contiguous_damaged_counts
-    // );
     // Base cases
     if contiguous_damaged_counts.is_empty() {
         if conditions.iter().any(|c| *c == Condition::Damaged) {
             // we failed to account for at least one damaged tile
-            // println!("Returning 0");
             return 0;
         } else {
             // success!
-            // println!("Returning 1!");
             return 1;
         }
     }
@@ -76,7 +35,6 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let num_remaining_conditions_required = contiguous_damaged_counts.iter().sum::<u32>() as usize
         + (contiguous_damaged_counts.len() - 1);
     if conditions.len() < num_remaining_conditions_required {
-        // println!("Returning 0 from heuristic");
         return 0;
     }
 
@@ -88,7 +46,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
     let mut maybe_streak_start_i = None;
     let mut streak_len: usize = 0;
     let mut streak_has_known_damaged = false;
-    // let mut still_check_streak_incremented_by_one_from = None;
+    let mut still_check_streak_incremented_by_one_from = None;
     while i < conditions.len() {
         let condition = conditions[i];
         if condition == Condition::Operational {
@@ -106,13 +64,11 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
                 maybe_streak_start_i = None;
                 streak_len = 0;
                 if streak_has_known_damaged {
-                    // still_check_streak_incremented_by_one_from = None;
+                    still_check_streak_incremented_by_one_from = None;
                     break;
                 }
             }
         } else {
-            // TODO as soon as streak is one greater than allowed, MUST stop
-            //   BUT: will this ruin my +1?
             if condition == Condition::Damaged {
                 streak_has_known_damaged = true;
             }
@@ -127,7 +83,7 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
             } else if condition == Condition::Damaged && streak_len > needed_damaged_count {
                 // there were too damaged tiles in this streak, and we weren't able to split them
                 // apart in a way that meets requirements
-                // still_check_streak_incremented_by_one_from = maybe_streak_start_i;
+                still_check_streak_incremented_by_one_from = maybe_streak_start_i;
                 maybe_streak_start_i = None; // indicate failure
                 break;
             }
@@ -147,11 +103,13 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
 
     match maybe_streak_start_i {
         None => {
-            // if still_check_streak_incremented_by_one_from.is_some() {
-            let initial_condition = &conditions[0];
-            if initial_condition != &Condition::Damaged {
-                // TODO avoid this if it tanks performance?
-                return num_valid_arrangements(&conditions[1..], &contiguous_damaged_counts);
+            if still_check_streak_incremented_by_one_from.is_some() {
+                let initial_condition = &conditions[0];
+                if initial_condition != &Condition::Damaged {
+                    return num_valid_arrangements(&conditions[1..], &contiguous_damaged_counts);
+                } else {
+                    return 0;
+                }
             } else {
                 return 0;
             }
@@ -184,58 +142,6 @@ fn num_valid_arrangements(conditions: &[Condition], contiguous_damaged_counts: &
 struct Row {
     conditions: Vec<Condition>,
     contiguous_damaged_counts: Vec<u32>,
-}
-
-impl Row {
-    fn num_valid_arrangements_brute_force(&self) -> usize {
-        let unknown_condition_indices: Vec<usize> = self
-            .conditions
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| **c == Condition::Unknown)
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
-        let num_unknown: usize = unknown_condition_indices.len();
-        if num_unknown == 0 {
-            return 1;
-        }
-
-        // brute force: test every possibility
-        let two: u32 = 2;
-        let num_possible_arrangements = two.pow(num_unknown as u32);
-        let mut all_possible_arrangements: Vec<Vec<Condition>> =
-            vec![self.conditions.clone(); num_possible_arrangements as usize];
-        for (index_num, unknown_i) in unknown_condition_indices.iter().enumerate() {
-            let change_every = two.pow(index_num as u32) as usize;
-            let mut curr_condition = Condition::Damaged;
-            for (arrangement_num, possible_arrangement_i) in
-                (0..num_possible_arrangements as usize).enumerate()
-            {
-                all_possible_arrangements[possible_arrangement_i][*unknown_i] = curr_condition;
-                let division_safe_arrangement_num = arrangement_num + 1;
-                if division_safe_arrangement_num % change_every == 0 {
-                    curr_condition = match curr_condition {
-                        Condition::Damaged => Condition::Operational,
-                        Condition::Operational => Condition::Damaged,
-                        Condition::Unknown => panic!("Unknown condition not valid here"),
-                    }
-                }
-            }
-        }
-        let mut num_valid_arrangements = 0;
-        for arrangement in all_possible_arrangements {
-            let contiguous = ContiguousConditions::vec_from_conditions_vec(arrangement);
-            let arrangement_damaged_counts = contiguous
-                .iter()
-                .filter(|cc| cc.condition == Condition::Damaged)
-                .map(|cc| cc.num)
-                .collect::<Vec<_>>();
-            if arrangement_damaged_counts == self.contiguous_damaged_counts {
-                num_valid_arrangements += 1;
-            }
-        }
-        num_valid_arrangements
-    }
 }
 
 fn main() {
