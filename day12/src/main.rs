@@ -171,7 +171,7 @@ struct Row {
 }
 
 fn main() {
-    let file = File::open("resources/input_1").unwrap();
+    let file = File::open("resources/sample_6").unwrap();
     let reader = BufReader::new(file);
 
     let mut rows: Vec<Row> = Vec::new();
@@ -239,17 +239,17 @@ fn main() {
         .sum::<usize>();
     println!("Part 1 solution: {total_valid_arrangements}");
 
-    let total_valid_expanded_arrangements = expanded_rows
-        .iter()
-        .enumerate()
-        // .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
-        .map(|(i, row)| {
-            // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
-            let num_arrangements =
-                num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
-            println!("{} {}", i, num_arrangements);
-            num_arrangements
-        })
-        .sum::<usize>();
-    println!("Part 2 solution: {total_valid_expanded_arrangements}");
+    // let total_valid_expanded_arrangements = expanded_rows
+    //     .iter()
+    //     .enumerate()
+    //     // .map(|row| num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts))
+    //     .map(|(i, row)| {
+    //         // let num_arrangements = Row::num_valid_arrangements_brute_force(row);
+    //         let num_arrangements =
+    //             num_valid_arrangements(&row.conditions, &row.contiguous_damaged_counts);
+    //         println!("{} {}", i, num_arrangements);
+    //         num_arrangements
+    //     })
+    //     .sum::<usize>();
+    // println!("Part 2 solution: {total_valid_expanded_arrangements}");
 }
