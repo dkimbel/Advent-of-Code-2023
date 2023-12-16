@@ -156,7 +156,7 @@ fn get_num_energized_from_starting_beam(beam: BeamState, grid: &Vec<Vec<Tile>>) 
 }
 
 fn main() {
-    let file = File::open("resources/sample_1").unwrap();
+    let file = File::open("resources/input_1").unwrap();
     let reader = BufReader::new(file);
 
     let mut grid: Vec<Vec<Tile>> = Vec::new();
@@ -172,4 +172,47 @@ fn main() {
     };
     let part_1_num_energized = get_num_energized_from_starting_beam(part_1_beam, &grid);
     println!("Part 1 solution: {part_1_num_energized}");
+
+    let max_x = grid[0].len() - 1;
+    let max_y = grid.len() - 1;
+    let mut all_possible_starting_beams: Vec<BeamState> = Vec::new();
+    for possible_y in 0..(max_y + 1) {
+        all_possible_starting_beams.push(BeamState {
+            coords: Coords {
+                x: 0,
+                y: possible_y,
+            },
+            direction: Direction::Right,
+        });
+        all_possible_starting_beams.push(BeamState {
+            coords: Coords {
+                x: max_x,
+                y: possible_y,
+            },
+            direction: Direction::Left,
+        });
+    }
+    for possible_x in 0..(max_x + 1) {
+        all_possible_starting_beams.push(BeamState {
+            coords: Coords {
+                x: possible_x,
+                y: 0,
+            },
+            direction: Direction::Down,
+        });
+        all_possible_starting_beams.push(BeamState {
+            coords: Coords {
+                x: possible_x,
+                y: max_y,
+            },
+            direction: Direction::Up,
+        });
+    }
+
+    let max_num_energized = all_possible_starting_beams
+        .iter()
+        .map(|beam| get_num_energized_from_starting_beam(*beam, &grid))
+        .max()
+        .unwrap();
+    println!("Part 2 solution: {max_num_energized}");
 }
