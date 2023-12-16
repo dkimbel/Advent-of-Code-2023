@@ -132,22 +132,9 @@ fn maybe_next_coords(
     }
 }
 
-fn main() {
-    let file = File::open("resources/input_1").unwrap();
-    let reader = BufReader::new(file);
-
-    let mut grid: Vec<Vec<Tile>> = Vec::new();
-
-    for line in reader.lines() {
-        let row: Vec<Tile> = line.unwrap().chars().map(Tile::from_char).collect();
-        grid.push(row);
-    }
-
+fn get_num_energized_from_starting_beam(beam: BeamState, grid: &Vec<Vec<Tile>>) -> usize {
     let mut already_processed_beam_states: HashSet<BeamState> = HashSet::new();
-    let mut beams: Vec<BeamState> = vec![BeamState {
-        coords: Coords { x: 0, y: 0 },
-        direction: Direction::Right,
-    }];
+    let mut beams = vec![beam];
 
     while let Some(beam) = beams.pop() {
         if already_processed_beam_states.contains(&beam) {
@@ -165,6 +152,24 @@ fn main() {
 
     let visited_coords: HashSet<Coords> =
         HashSet::from_iter(already_processed_beam_states.iter().map(|beam| beam.coords));
-    let num_energized = visited_coords.len();
-    println!("Part 1 solution: {num_energized}");
+    visited_coords.len()
+}
+
+fn main() {
+    let file = File::open("resources/sample_1").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut grid: Vec<Vec<Tile>> = Vec::new();
+
+    for line in reader.lines() {
+        let row: Vec<Tile> = line.unwrap().chars().map(Tile::from_char).collect();
+        grid.push(row);
+    }
+
+    let part_1_beam = BeamState {
+        coords: Coords { x: 0, y: 0 },
+        direction: Direction::Right,
+    };
+    let part_1_num_energized = get_num_energized_from_starting_beam(part_1_beam, &grid);
+    println!("Part 1 solution: {part_1_num_energized}");
 }
